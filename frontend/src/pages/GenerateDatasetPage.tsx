@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Play, Terminal, CheckCircle, AlertTriangle, Loader2, Key } from "lucide-react";
 import { checkDefaultApiLimit, hasCustomApiKey, recordDefaultApiUsage } from "../services/defaultApiKeyService";
+import { getApiUrl } from "../services/apiConfig";
 import { saveDataset, saveLastDatasetPayload } from "../services/datasetStorageService";
 import { getStoredAuthState } from "../services/authService";
 import { GeneratedDataset } from "../types/dataset";
@@ -57,7 +58,7 @@ const GenerateDatasetPage = () => {
     try {
       setLogs(prev => [...prev, "📋 Planner Agent: Analyzing task requirements..."]);
 
-      const response = await fetch("/generate", {
+      const response = await fetch(getApiUrl("/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSubscription } from "../hooks/useSubscription";
+import { getApiUrl } from "../services/apiConfig";
 import SubscriptionBadge from "../components/billing/SubscriptionBadge";
 import {
   CreditCard,
@@ -55,7 +56,7 @@ export const BillingSettingsPage = () => {
 
   useEffect(() => {
     const email = activeUser?.email || "";
-    fetch(`/api/billing/invoices?user_email=${encodeURIComponent(email)}`)
+    fetch(getApiUrl(`/api/billing/invoices?user_email=${encodeURIComponent(email)}`))
       .then((res) => res.json())
       .then((data) => {
         if (data && data.invoices) {
