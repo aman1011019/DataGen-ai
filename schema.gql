@@ -1,0 +1,59 @@
+# Firebase Data Connect GraphQL Schema
+# Service: datagen-da10d-service | Instance: datagen-da10d-instance
+
+type UserProfile @table {
+  id: String! @primaryKey
+  firebaseUid: String!
+  email: String!
+  displayName: String
+  photoUrl: String
+  createdAt: Date
+  updatedAt: Date
+}
+
+type Dataset @table {
+  id: String! @primaryKey
+  userProfile: UserProfile!
+  name: String!
+  description: String
+  category: String
+  mlTask: String
+  recordCount: Int
+  fieldCount: Int
+  qualityScore: Float
+  createdAt: Date
+  updatedAt: Date
+}
+
+type DatasetField @table {
+  id: String! @primaryKey
+  dataset: Dataset!
+  name: String!
+  type: String!
+  description: String
+  required: Boolean
+  nullable: Boolean
+  syntheticStrategy: String
+}
+
+type UsageWindow @table {
+  id: String! @primaryKey
+  userProfile: UserProfile!
+  datasetsCreatedCount: Int
+  lastGeneratedAt: Date
+  windowResetAt: Date
+  createdAt: Date
+}
+
+type GenerationJob @table {
+  id: String! @primaryKey
+  userProfile: UserProfile!
+  datasetId: String
+  taskType: String
+  domain: String
+  requestedRows: Int
+  generatedRows: Int
+  validRows: Int
+  status: String
+  createdAt: Date
+}
