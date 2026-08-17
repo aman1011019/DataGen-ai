@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 @app.get("/api")
+@app.get("/api/health")
 def root():
     return {
         "status": "DataGen SaaS Platform API is running 🚀",
@@ -50,6 +51,7 @@ def root():
     }
 
 @app.get("/api/schema-prompt")
+@app.get("/schema-prompt")
 def get_schema_prompt(format: Optional[str] = "postgresql"):
     return {
         "status": "success",
@@ -60,6 +62,7 @@ def get_schema_prompt(format: Optional[str] = "postgresql"):
 
 # ==================== DATASET GENERATION ENDPOINT ====================
 @app.post("/generate", response_model=GenerationResponse)
+@app.post("/api/generate", response_model=GenerationResponse)
 async def generate(req: GenerationRequest):
     user_id = req.user_email.replace("@", "_").replace(".", "_").lower() if req.user_email else "anonymous"
 
@@ -98,6 +101,7 @@ async def generate(req: GenerationRequest):
 
 # ==================== SUBSCRIPTION & BILLING ENDPOINTS ====================
 @app.get("/api/billing/subscription")
+@app.get("/billing/subscription")
 async def get_subscription(user_email: Optional[str] = None):
     user_id = user_email.replace("@", "_").replace(".", "_").lower() if user_email else "anonymous"
     sub = get_user_subscription(user_id)
@@ -108,12 +112,14 @@ async def get_subscription(user_email: Optional[str] = None):
     }
 
 @app.post("/api/billing/create-order", response_model=CreateOrderResponse)
+@app.post("/billing/create-order", response_model=CreateOrderResponse)
 async def create_order(req: CreateOrderRequest):
     user_id = req.user_email.replace("@", "_").replace(".", "_")
     req.user_id = user_id
     return create_checkout_order(req)
 
 @app.post("/api/billing/verify-payment")
+@app.post("/billing/verify-payment")
 async def verify_payment(req: VerifyPaymentRequest):
     user_id = req.user_email.replace("@", "_").replace(".", "_")
     req.user_id = user_id
@@ -125,6 +131,7 @@ async def verify_payment(req: VerifyPaymentRequest):
     }
 
 @app.post("/api/billing/cancel")
+@app.post("/billing/cancel")
 async def cancel_subscription(req: CancelSubscriptionRequest):
     sub = cancel_user_subscription(req.user_id)
     return {
@@ -134,6 +141,7 @@ async def cancel_subscription(req: CancelSubscriptionRequest):
     }
 
 @app.post("/api/billing/change-plan")
+@app.post("/billing/change-plan")
 async def change_plan(req: ChangePlanRequest):
     sub = get_user_subscription(req.user_id)
     sub.plan = req.new_plan_id
@@ -144,12 +152,14 @@ async def change_plan(req: ChangePlanRequest):
     }
 
 @app.get("/api/billing/invoices")
+@app.get("/billing/invoices")
 async def get_invoices(user_email: Optional[str] = None):
     user_id = user_email.replace("@", "_").replace(".", "_").lower() if user_email else "anonymous"
     invoices = get_user_invoices(user_id)
     return {"invoices": invoices}
 
 @app.post("/api/billing/webhook")
+@app.post("/billing/webhook")
 async def billing_webhook(request: Request, x_razorpay_signature: Optional[str] = Header(None)):
     body_bytes = await request.body()
     result = process_webhook_payload(body_bytes, x_razorpay_signature)
@@ -163,7 +173,7 @@ if os.path.exists(os.path.join(dist_dir, "assets")):
 
 @app.get("/{full_path:path}")
 def catch_all(full_path: str):
-    if full_path.startswith("api") or full_path.startswith("generate"):
+    if full_path.startswith("api") or full_path.startswith("generate") or full_path.startswith("schema-prompt") or full_path.startswith("billing"):
         raise HTTPException(status_code=404, detail="Not Found")
     index_file = os.path.join(dist_dir, "index.html")
     if os.path.exists(index_file):
