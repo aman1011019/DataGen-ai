@@ -37,3 +37,6 @@ Thumbs.db
 npm-debug.log*
 
 .vercel
+bun.lockb
+*.lockb
+
