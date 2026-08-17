@@ -55,7 +55,7 @@ export const BillingSettingsPage = () => {
 
   useEffect(() => {
     const email = activeUser?.email || "";
-    fetch(`http://localhost:8000/api/billing/invoices?user_email=${encodeURIComponent(email)}`)
+    fetch(`/api/billing/invoices?user_email=${encodeURIComponent(email)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.invoices) {
