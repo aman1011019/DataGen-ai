@@ -9,6 +9,10 @@
     {
       "source": "/generate",
       "destination": "/api/index.py"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ]
 }
