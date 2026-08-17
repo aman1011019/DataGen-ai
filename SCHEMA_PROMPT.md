@@ -2,7 +2,7 @@
 
 > **Official Prompt & Architecture Specs for Generating DataGen Database Schemas**
 
-This document contains the official prompt used to generate database schema definitions for the DataGen Framework across multiple database dialects (PostgreSQL, Firebase Data Connect / GraphQL, Prisma, and Pydantic DTOs).
+This document contains the official prompt used to generate database schema definitions for the DataGen Framework across multiple database dialects (PostgreSQL, Supabase GraphQL / REST, Prisma, and Pydantic DTOs).
 
 ---
 
@@ -15,7 +15,7 @@ You are a Principal Database Architect & Data Engineer. Your task is to generate
 DataGen is an Automated Synthetic Dataset Generation platform for ML fine-tuning. The system requires the following core data models and relationships:
 
 1. User Profile (`UserProfile` / `users`):
-   - Attributes: id (PK, String/UUID), firebaseUid (String, indexed), email (String, unique, indexed), displayName (String), photoUrl (Text/String), createdAt (Timestamp), updatedAt (Timestamp)
+   - Attributes: id (PK, String/UUID), supabaseUid (String, indexed), email (String, unique, indexed), displayName (String), photoUrl (Text/String), createdAt (Timestamp), updatedAt (Timestamp)
    - Relations: One-to-Many with Datasets, UsageWindows, GenerationJobs, Subscriptions, Payments, Invoices.
 
 2. Dataset (`Dataset` / `datasets`):
@@ -47,7 +47,7 @@ DataGen is an Automated Synthetic Dataset Generation platform for ML fine-tuning
    - Attributes: userId (PK, FK -> UserProfile.id, CASCADE), datasetsCreated (Int), rowsGenerated (Int), updatedAt (Timestamp)
 
 --- OUTPUT REQUIREMENTS ---
-Generate executable schema definitions in your target output format (PostgreSQL SQL DDL, Firebase Data Connect GraphQL schema, Prisma Schema, or Pydantic models). Include:
+Generate executable schema definitions in your target output format (PostgreSQL SQL DDL, Supabase GraphQL / REST schema, Prisma Schema, or Pydantic models). Include:
 - Primary keys, foreign key constraints with ON DELETE CASCADE where appropriate
 - Indexes for query optimization (e.g. userProfileId, datasetId, email)
 - Default timestamps (CURRENT_TIMESTAMP) and data types matched strictly to enterprise requirements
@@ -62,4 +62,5 @@ Generate executable schema definitions in your target output format (PostgreSQL 
 2. **REST API Endpoint**: Available at `GET /api/schema-prompt?format=postgresql` in [`backend/main.py`](file:///c:/Users/aman1/Downloads/Datagen-framework-main/backend/main.py).
 3. **Database Schema Files**:
    - PostgreSQL SQL: [`schema.sql`](file:///c:/Users/aman1/Downloads/Datagen-framework-main/schema.sql)
-   - Firebase Data Connect GraphQL: [`schema.gql`](file:///c:/Users/aman1/Downloads/Datagen-framework-main/schema.gql)
+   - GraphQL Schema: [`schema.gql`](file:///c:/Users/aman1/Downloads/Datagen-framework-main/schema.gql)
+

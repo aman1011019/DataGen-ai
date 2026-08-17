@@ -14,7 +14,7 @@ SCHEMA_CREATION_PROMPT = """You are a Principal Database Architect & Data Engine
 DataGen is an Automated Synthetic Dataset Generation platform for ML fine-tuning. The system requires the following core data models and relationships:
 
 1. User Profile (`UserProfile` / `users`):
-   - Attributes: id (PK, String/UUID), firebaseUid (String, indexed), email (String, unique, indexed), displayName (String), photoUrl (Text/String), createdAt (Timestamp), updatedAt (Timestamp)
+   - Attributes: id (PK, String/UUID), supabaseUid (String, indexed), email (String, unique, indexed), displayName (String), photoUrl (Text/String), createdAt (Timestamp), updatedAt (Timestamp)
    - Relations: One-to-Many with Datasets, UsageWindows, GenerationJobs, Subscriptions, Payments, Invoices.
 
 2. Dataset (`Dataset` / `datasets`):
@@ -46,7 +46,7 @@ DataGen is an Automated Synthetic Dataset Generation platform for ML fine-tuning
    - Attributes: userId (PK, FK -> UserProfile.id, CASCADE), datasetsCreated (Int), rowsGenerated (Int), updatedAt (Timestamp)
 
 --- OUTPUT REQUIREMENTS ---
-Generate executable schema definitions in your target output format (PostgreSQL SQL DDL, Firebase Data Connect GraphQL schema, Prisma Schema, or Pydantic models). Include:
+Generate executable schema definitions in your target output format (PostgreSQL SQL DDL, Supabase GraphQL / REST schema, Prisma Schema, or Pydantic models). Include:
 - Primary keys, foreign key constraints with ON DELETE CASCADE where appropriate
 - Indexes for query optimization (e.g. userProfileId, datasetId, email)
 - Default timestamps (CURRENT_TIMESTAMP) and data types matched strictly to enterprise requirements

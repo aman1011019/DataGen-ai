@@ -1,7 +1,6 @@
 import { GeneratedDataset } from "../types/dataset";
 import { getActiveUserId } from "./authService";
-import { db } from "./firebase";
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { supabase } from "./supabase";
 
 function getUserStorageKey(): string {
   return `datagen_saved_datasets_${getActiveUserId()}`;
@@ -228,15 +227,17 @@ export const saveDataset = (dataset: GeneratedDataset): void => {
     console.error("Failed to write user datasets to local storage", e);
   }
 
-  // Sync to Firebase Firestore under user-scoped collection doc
+  // Sync to Supabase PostgreSQL database
   try {
-    setDoc(doc(db, "user_datasets", `${activeUserId}_${dataset.id}`), {
-      ...userDataset,
-      ownerUserId: activeUserId,
-      syncedAt: new Date().toISOString(),
-    }).catch((err) => console.warn("Firebase user dataset sync notice:", err));
+    supabase.from("user_datasets").upsert({
+      id: `${activeUserId}_${dataset.id}`,
+      dataset_id: dataset.id,
+      owner_user_id: activeUserId,
+      payload: userDataset,
+      synced_at: new Date().toISOString(),
+    }).then(() => {}).catch((err) => console.warn("Supabase user dataset sync notice:", err));
 
-    setDoc(doc(db, "Dataset", dataset.id), {
+    supabase.from("Dataset").upsert({
       id: dataset.id,
       userProfileId: activeUserId,
       name: dataset.name,
@@ -248,24 +249,23 @@ export const saveDataset = (dataset: GeneratedDataset): void => {
       qualityScore: dataset.qualityScore || 95,
       createdAt: dataset.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }).catch(() => {});
+    }).then(() => {}).catch(() => {});
 
     if (dataset.fields && Array.isArray(dataset.fields)) {
-      dataset.fields.forEach((f, idx) => {
-        setDoc(doc(db, "DatasetField", `${dataset.id}_f_${idx}`), {
-          id: `${dataset.id}_f_${idx}`,
-          datasetId: dataset.id,
-          name: f.name,
-          type: f.type,
-          description: f.description || "",
-          required: f.required !== false,
-          nullable: !!f.nullable,
-          syntheticStrategy: f.syntheticStrategy || "realistic_distribution",
-        }).catch(() => {});
-      });
+      const fieldRecords = dataset.fields.map((f, idx) => ({
+        id: `${dataset.id}_f_${idx}`,
+        datasetId: dataset.id,
+        name: f.name,
+        type: f.type,
+        description: f.description || "",
+        required: f.required !== false,
+        nullable: !!f.nullable,
+        syntheticStrategy: f.syntheticStrategy || "realistic_distribution",
+      }));
+      supabase.from("DatasetField").upsert(fieldRecords).then(() => {}).catch(() => {});
     }
   } catch (e) {
-    console.warn("Firebase storage sync offline mode active");
+    console.warn("Supabase storage sync offline mode active");
   }
 };
 
@@ -300,11 +300,12 @@ export const deleteDataset = (id: string): void => {
   } catch (_) {}
 
   try {
-    deleteDoc(doc(db, "user_datasets", `${activeUserId}_${id}`)).catch((err) =>
-      console.warn("Firebase delete sync notice:", err)
+    supabase.from("user_datasets").delete().eq("id", `${activeUserId}_${id}`).then(() => {}).catch((err) =>
+      console.warn("Supabase delete sync notice:", err)
     );
+    supabase.from("Dataset").delete().eq("id", id).then(() => {}).catch(() => {});
   } catch (e) {
-    console.warn("Firebase delete offline mode active");
+    console.warn("Supabase delete offline mode active");
   }
 };
 

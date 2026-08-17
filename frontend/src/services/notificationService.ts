@@ -1,6 +1,5 @@
 import { getActiveUserId } from "./authService";
-import { db } from "./firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { supabase } from "./supabase";
 
 export interface RealtimeNotification {
   id: string;
@@ -65,11 +64,17 @@ export const addNotification = (
 
   try {
     const userId = getActiveUserId();
-    setDoc(doc(db, "user_notifications", `${userId}_${newNotif.id}`), {
-      ...newNotif,
-      userId,
-      syncedAt: new Date().toISOString(),
-    }).catch(() => {});
+    supabase.from("user_notifications").upsert({
+      id: `${userId}_${newNotif.id}`,
+      notification_id: newNotif.id,
+      title: newNotif.title,
+      message: newNotif.message,
+      type: newNotif.type,
+      read: newNotif.read,
+      user_id: userId,
+      timestamp: newNotif.timestamp,
+      synced_at: new Date().toISOString(),
+    }).then(() => {}).catch(() => {});
   } catch (e) {}
 
   notifyListeners(updated);

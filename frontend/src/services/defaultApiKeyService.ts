@@ -1,5 +1,5 @@
 import { getAISettings } from "./aiProviderService";
-import { FIREBASE_GEMINI_API_KEY } from "./firebase";
+import { DEFAULT_GEMINI_API_KEY, FIREBASE_GEMINI_API_KEY } from "./defaultApiKey";
 import { getActiveUserId } from "./authService";
 
 function getDefaultUsageStorageKey(): string {

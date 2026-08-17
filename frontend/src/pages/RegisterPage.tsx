@@ -105,7 +105,7 @@ export const RegisterPage = () => {
             </div>
           )}
 
-          {/* Firebase Google Auth Button */}
+          {/* Supabase Google Auth Button */}
           <button
             type="button"
             onClick={handleGoogleLogin}

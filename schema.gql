@@ -1,9 +1,9 @@
-# Firebase Data Connect GraphQL Schema
-# Service: datagen-da10d-service | Instance: datagen-da10d-instance
+# DataGen AI SaaS GraphQL / Database Schema
+# Project Ref: vvisrdickbpcxggbknqj
 
 type UserProfile @table {
   id: String! @primaryKey
-  firebaseUid: String!
+  supabaseUid: String!
   email: String!
   displayName: String
   photoUrl: String

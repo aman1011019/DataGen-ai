@@ -45,7 +45,7 @@ export const LoginPage = () => {
       await loginWithGoogle();
       navigate("/dashboard");
     } catch (err) {
-      setErrorMsg("Firebase Google Sign-In failed.");
+      setErrorMsg("Google Sign-In failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export const LoginPage = () => {
             </div>
           )}
 
-          {/* Social Sign-in Button using Firebase Google OAuth */}
+          {/* Social Sign-in Button using Supabase Google OAuth */}
           <button
             type="button"
             onClick={handleGoogleLogin}

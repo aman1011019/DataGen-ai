@@ -1,27 +1,22 @@
 import { AuthState, UserProfile } from "../types/auth";
-import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider, db } from "./firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { supabase } from "./supabase";
 
 const AUTH_STORAGE_KEY = "datagen_auth_state";
 
-export const syncUserToFirebase = async (user: UserProfile | null) => {
+export const syncUserToSupabase = async (user: UserProfile | null) => {
   if (!user || !user.email) return;
   try {
-    const userDocRef = doc(db, "UserProfile", user.id);
-    await setDoc(userDocRef, {
+    await supabase.from("UserProfile").upsert({
       id: user.id,
-      firebaseUid: user.id,
+      supabaseUid: user.id,
       email: user.email,
       displayName: user.name || "",
       photoUrl: user.avatarUrl || "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
 
-    // Also sync to standard users collection
-    const usersRef = doc(db, "users", user.id);
-    await setDoc(usersRef, {
+    await supabase.from("users").upsert({
       id: user.id,
       email: user.email,
       displayName: user.name || "",
@@ -30,9 +25,9 @@ export const syncUserToFirebase = async (user: UserProfile | null) => {
       role: user.role || "",
       plan: user.plan || "Normal",
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
   } catch (err) {
-    console.warn("Notice: Firebase db sync offline or pending:", err);
+    console.warn("Notice: Supabase db sync offline or pending:", err);
   }
 };
 
@@ -68,7 +63,7 @@ export const saveAuthState = (state: AuthState): void => {
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
     if (state.user) {
-      syncUserToFirebase(state.user).catch(() => {});
+      syncUserToSupabase(state.user).catch(() => {});
     }
     // Dispatch auth changed event so all components dynamically re-scope
     if (typeof window !== "undefined") {
@@ -82,16 +77,28 @@ export const saveAuthState = (state: AuthState): void => {
 
 export const loginWithGoogle = async (): Promise<UserProfile> => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const firebaseUser = result.user;
-    const cleanEmail = (firebaseUser.email || "user@datagen.ai").trim().toLowerCase();
-    const userId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + "/dashboard",
+      },
+    });
+
+    if (error) throw error;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const sbUser = sessionData?.session?.user;
+
+    const cleanEmail = (sbUser?.email || "user@datagen.ai").trim().toLowerCase();
+    const userId = sbUser?.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const displayName = sbUser?.user_metadata?.full_name || sbUser?.user_metadata?.name || "Google user";
+    const avatarUrl = sbUser?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
 
     const user: UserProfile = {
       id: userId,
-      name: firebaseUser.displayName || "Google user",
+      name: displayName,
       email: cleanEmail,
-      avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || "User")}`,
+      avatarUrl,
       organization: "Enterprise AI Labs",
       role: "Lead Data Engineer",
       plan: "Pro Plan",
@@ -99,17 +106,15 @@ export const loginWithGoogle = async (): Promise<UserProfile> => {
       recordsGenerated: 0,
     };
 
-    const token = await firebaseUser.getIdToken();
-
     saveAuthState({
       user,
       isAuthenticated: true,
-      token,
+      token: sessionData?.session?.access_token || `token_${Date.now()}`,
     });
 
     return user;
   } catch (error: any) {
-    console.warn("Firebase Google Sign-In Popup handled/fallback:", error);
+    console.warn("Supabase Google Sign-In handled/fallback:", error);
     console.error("Google Sign-In failed:", error);
     throw new Error(error?.message || "Google Sign-In failed. Please try again.");
   }
@@ -179,6 +184,7 @@ export const registerUser = async (name: string, email: string): Promise<UserPro
 };
 
 export const logoutUser = (): void => {
+  supabase.auth.signOut().catch(() => {});
   saveAuthState({
     user: null,
     isAuthenticated: false,
