@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.get("/api")
 def root():
     return {
         "status": "DataGen SaaS Platform API is running 🚀",
