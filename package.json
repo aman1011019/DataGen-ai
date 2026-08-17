@@ -1,0 +1,9 @@
+{
+  "name": "datagen-ai-root",
+  "version": "2.4.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install --legacy-peer-deps && npm run build",
+    "deploy:workers": "npm run build && npx wrangler deploy"
+  }
+}

@@ -1,5 +1,4 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -21,29 +20,65 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught runtime error:", error, errorInfo);
+    console.error("Uncaught error:", error, errorInfo);
   }
 
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-[400px] flex items-center justify-center p-6">
-          <div className="glass max-w-md w-full p-8 rounded-2xl border border-destructive/30 space-y-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h2 className="text-lg font-bold text-foreground">Something went wrong</h2>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {this.state.error?.message || "An unexpected rendering error occurred."}
+        <div style={{
+          minHeight: "100vh",
+          backgroundColor: "#081021",
+          color: "#ffffff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Inter, system-ui, sans-serif",
+          padding: "20px",
+          textAlign: "center"
+        }}>
+          <div style={{
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "16px",
+            padding: "40px",
+            maxWidth: "500px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)"
+          }}>
+            <h2 style={{ fontSize: "24px", fontWeight: "700", marginBottom: "12px", color: "#f87171" }}>
+              Something went wrong
+            </h2>
+            <p style={{ color: "#9ca3af", fontSize: "14px", marginBottom: "20px" }}>
+              The application encountered an unexpected runtime error.
             </p>
+            <div style={{
+              background: "#030712",
+              padding: "12px",
+              borderRadius: "8px",
+              fontSize: "12px",
+              fontFamily: "monospace",
+              color: "#ef4444",
+              overflowX: "auto",
+              textAlign: "left",
+              marginBottom: "24px"
+            }}>
+              {this.state.error?.toString() || "Unknown error"}
+            </div>
             <button
-              onClick={() => {
-                this.setState({ hasError: false, error: null });
-                window.location.reload();
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: "#6366f1",
+                color: "#ffffff",
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "8px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "background-color 0.2s"
               }}
-              className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2 mx-auto hover:bg-primary/90 transition-all shadow-md"
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Reload View
+              Reload Page
             </button>
           </div>
         </div>
@@ -55,3 +90,4 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 export default ErrorBoundary;
+
