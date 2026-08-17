@@ -35,7 +35,13 @@ export const getStoredAuthState = (): AuthState => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed: AuthState = JSON.parse(raw);
+      // Ensure we clean out any dummy placeholder accounts
+      if (parsed.user && parsed.user.email === "user@datagen.ai") {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        return { user: null, isAuthenticated: false, token: null };
+      }
+      return parsed;
     }
   } catch (e) {
     console.error("Failed to parse auth state", e);
@@ -61,6 +67,11 @@ export const getActiveUserId = (): string => {
 
 export const saveAuthState = (state: AuthState): void => {
   try {
+    // Never persist dummy placeholder user accounts
+    if (state.user && state.user.email === "user@datagen.ai") {
+      return;
+    }
+
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
     if (state.user) {
       syncUserToSupabase(state.user).catch(() => {});
@@ -74,127 +85,108 @@ export const saveAuthState = (state: AuthState): void => {
   }
 };
 
-// Global listener for Supabase Auth state changes (OAuth callbacks)
+// Handle OAuth session callbacks and clean URL error query strings
 if (typeof window !== "undefined") {
-  // Clear any stale OAuth error parameters if URL contains bad_oauth_state
+  // Clear any stale OAuth error parameters if URL contains error or bad_oauth_state
   if (window.location.search.includes("error=") || window.location.search.includes("error_code=")) {
     console.warn("Cleaning OAuth URL error parameters:", window.location.search);
     const cleanUrl = window.location.origin + window.location.pathname;
     window.history.replaceState({}, document.title, cleanUrl);
   }
 
+  // Parse Supabase Session on App load (including OAuth hash callbacks like #access_token=...)
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user) {
+      const sbUser = session.user;
+      const cleanEmail = (sbUser.email || "").trim().toLowerCase();
+      if (cleanEmail && cleanEmail !== "user@datagen.ai") {
+        const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+        const displayName =
+          sbUser.user_metadata?.full_name ||
+          sbUser.user_metadata?.name ||
+          cleanEmail.split("@")[0] ||
+          "User";
+        const avatarUrl =
+          sbUser.user_metadata?.avatar_url ||
+          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+
+        const user: UserProfile = {
+          id: userId,
+          name: displayName,
+          email: cleanEmail,
+          avatarUrl,
+          organization: "Enterprise AI Labs",
+          role: "Lead Data Engineer",
+          plan: "Pro Plan",
+          datasetsCreated: 0,
+          recordsGenerated: 0,
+        };
+
+        saveAuthState({
+          user,
+          isAuthenticated: true,
+          token: session.access_token || `token_${Date.now()}`,
+        });
+      }
+    }
+  });
+
+  // Listen to active Auth state changes
   supabase.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
       const sbUser = session.user;
-      const cleanEmail = (sbUser.email || "user@datagen.ai").trim().toLowerCase();
-      const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-      const displayName =
-        sbUser.user_metadata?.full_name ||
-        sbUser.user_metadata?.name ||
-        cleanEmail.split("@")[0] ||
-        "Google User";
-      const avatarUrl =
-        sbUser.user_metadata?.avatar_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+      const cleanEmail = (sbUser.email || "").trim().toLowerCase();
+      if (cleanEmail && cleanEmail !== "user@datagen.ai") {
+        const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+        const displayName =
+          sbUser.user_metadata?.full_name ||
+          sbUser.user_metadata?.name ||
+          cleanEmail.split("@")[0] ||
+          "User";
+        const avatarUrl =
+          sbUser.user_metadata?.avatar_url ||
+          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
 
-      const user: UserProfile = {
-        id: userId,
-        name: displayName,
-        email: cleanEmail,
-        avatarUrl,
-        organization: "Enterprise AI Labs",
-        role: "Lead Data Engineer",
-        plan: "Pro Plan",
-        datasetsCreated: 0,
-        recordsGenerated: 0,
-      };
+        const user: UserProfile = {
+          id: userId,
+          name: displayName,
+          email: cleanEmail,
+          avatarUrl,
+          organization: "Enterprise AI Labs",
+          role: "Lead Data Engineer",
+          plan: "Pro Plan",
+          datasetsCreated: 0,
+          recordsGenerated: 0,
+        };
 
-      saveAuthState({
-        user,
-        isAuthenticated: true,
-        token: session.access_token || `token_${Date.now()}`,
-      });
+        saveAuthState({
+          user,
+          isAuthenticated: true,
+          token: session.access_token || `token_${Date.now()}`,
+        });
+      }
     }
   });
 }
 
-export const loginWithGoogle = async (): Promise<UserProfile> => {
-  try {
-    const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
-    const redirectUrl = `${currentOrigin}/dashboard`;
+export const loginWithGoogle = async (): Promise<void> => {
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:8080";
+  const redirectUrl = `${currentOrigin}/dashboard`;
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: redirectUrl,
-        queryParams: {
-          prompt: "select_account",
-          access_type: "offline",
-        },
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: redirectUrl,
+      queryParams: {
+        prompt: "select_account",
+        access_type: "offline",
       },
-    });
+    },
+  });
 
-    if (error) throw error;
-
-    const { data: sessionData } = await supabase.auth.getSession();
-    const sbUser = sessionData?.session?.user;
-
-    if (sbUser) {
-      const cleanEmail = (sbUser.email || "user@datagen.ai").trim().toLowerCase();
-      const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-      const displayName =
-        sbUser.user_metadata?.full_name ||
-        sbUser.user_metadata?.name ||
-        cleanEmail.split("@")[0] ||
-        "Google User";
-      const avatarUrl =
-        sbUser.user_metadata?.avatar_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
-
-      const user: UserProfile = {
-        id: userId,
-        name: displayName,
-        email: cleanEmail,
-        avatarUrl,
-        organization: "Enterprise AI Labs",
-        role: "Lead Data Engineer",
-        plan: "Pro Plan",
-        datasetsCreated: 0,
-        recordsGenerated: 0,
-      };
-
-      saveAuthState({
-        user,
-        isAuthenticated: true,
-        token: sessionData?.session?.access_token || `token_${Date.now()}`,
-      });
-
-      return user;
-    }
-
-    // Fallback temporary user while OAuth redirect is processing
-    const tempUser: UserProfile = {
-      id: `usr_${Date.now()}`,
-      name: "Google Account",
-      email: "google.user@datagen.ai",
-      avatarUrl: "https://api.dicebear.com/7.x/initials/svg?seed=Google",
-      organization: "Enterprise Workspace",
-      role: "AI Engineer",
-      plan: "Pro Plan",
-      datasetsCreated: 0,
-      recordsGenerated: 0,
-    };
-
-    saveAuthState({
-      user: tempUser,
-      isAuthenticated: true,
-      token: `token_${Date.now()}`,
-    });
-
-    return tempUser;
-  } catch (error: any) {
-    console.warn("Supabase Google Sign-In notice:", error);
-    throw new Error(error?.message || "Google Sign-In failed. Please try again.");
+  if (error) {
+    console.error("Supabase Google Sign-In error:", error);
+    throw new Error(error.message || "Google Sign-In failed. Please try again.");
   }
 };
 

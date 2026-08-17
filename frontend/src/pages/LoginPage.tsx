@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
@@ -13,6 +13,14 @@ export const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    const authState = getStoredAuthState();
+    if (authState.isAuthenticated && authState.user && authState.user.email !== "user@datagen.ai") {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,10 +51,8 @@ export const LoginPage = () => {
     setErrorMsg("");
     try {
       await loginWithGoogle();
-      navigate("/dashboard");
     } catch (err) {
       setErrorMsg("Google Sign-In failed. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };

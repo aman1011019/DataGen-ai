@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, Check } from "lucide-react";
 import Logo from "@/components/Logo";
@@ -15,6 +15,14 @@ export const RegisterPage = () => {
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    const authState = getStoredAuthState();
+    if (authState.isAuthenticated && authState.user && authState.user.email !== "user@datagen.ai") {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
+
 
   const hasLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
@@ -57,10 +65,8 @@ export const RegisterPage = () => {
     setErrorMsg("");
     try {
       await loginWithGoogle();
-      navigate("/dashboard");
     } catch (err) {
       setErrorMsg("Google Sign-In failed.");
-    } finally {
       setIsLoading(false);
     }
   };
