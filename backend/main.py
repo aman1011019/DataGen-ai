@@ -164,18 +164,3 @@ async def billing_webhook(request: Request, x_razorpay_signature: Optional[str] 
     body_bytes = await request.body()
     result = process_webhook_payload(body_bytes, x_razorpay_signature)
     return result
-
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-dist_dir = os.path.join(BASE_DIR, "frontend", "dist")
-
-if os.path.exists(os.path.join(dist_dir, "assets")):
-    app.mount("/assets", StaticFiles(directory=os.path.join(dist_dir, "assets")), name="assets")
-
-@app.get("/{full_path:path}")
-def catch_all(full_path: str):
-    if full_path.startswith("api") or full_path.startswith("generate") or full_path.startswith("schema-prompt") or full_path.startswith("billing"):
-        raise HTTPException(status_code=404, detail="Not Found")
-    index_file = os.path.join(dist_dir, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {"detail": "Not Found"}
