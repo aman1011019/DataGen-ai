@@ -40,3 +40,4 @@ npm-debug.log*
 bun.lockb
 *.lockb
 
+.vercel
