@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, Bell, Sparkles, User, Settings, LogOut, Menu, Shield, Sun, Moon, CheckCheck, Trash2, Database, Download, Cpu, Info } from "lucide-react";
-import { getStoredAuthState, logoutUser } from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
 import {
   getUserNotifications,
@@ -19,8 +19,7 @@ interface DashboardHeaderProps {
 export const DashboardHeader = ({ onToggleMobileSidebar }: DashboardHeaderProps) => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const authState = getStoredAuthState();
-  const user = authState.user;
+  const { user, signOut } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
@@ -41,10 +40,11 @@ export const DashboardHeader = ({ onToggleMobileSidebar }: DashboardHeaderProps)
     }
   };
 
-  const handleLogout = () => {
-    logoutUser();
-    navigate("/login");
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
   };
+
 
   const formatTimeAgo = (isoString: string): string => {
     const diffMs = Date.now() - new Date(isoString).getTime();

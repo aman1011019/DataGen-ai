@@ -47,7 +47,7 @@ const STEPS = [
   { id: 6, label: "Preview & Export" },
 ];
 
-const RECORD_PRESETS = [100, 500, 1000, 5000, 10000, 50000, 100000];
+const RECORD_PRESETS = [100, 500, 1000, 2500, 5000];
 
 export const CreateDatasetPage = () => {
   const [searchParams] = useSearchParams();
@@ -74,7 +74,8 @@ export const CreateDatasetPage = () => {
   const [suggestedFields, setSuggestedFields] = useState<FieldDefinition[]>([]);
 
   // Step 4: Config
-  const [recordCount, setRecordCount] = useState(10000);
+  const [recordCount, setRecordCount] = useState(1000);
+
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [settings, setSettings] = useState<AdvancedSettings>({
     realism: "High",
@@ -219,10 +220,15 @@ export const CreateDatasetPage = () => {
 
   // Step 4 -> 5 -> 6 Dataset Generation Trigger
   const handleStartGeneration = async () => {
-    // 1. Default API Key Limit Check (1 dataset per 7 days, max 5,000 records)
+    if (recordCount > 5000) {
+      toast.error("Maximum 5,000 rows are allowed per dataset.");
+      return;
+    }
+
+    // 1. Check generation limits (3 datasets per 7 days)
     const defaultCheck = checkDefaultApiLimit(recordCount);
     if (!defaultCheck.allowed) {
-      toast.error(defaultCheck.message || "Default API Key limit reached.");
+      toast.error(defaultCheck.message || "Generation limit reached.");
       setDefaultApiModal({
         open: true,
         message: defaultCheck.message || "",
@@ -230,6 +236,7 @@ export const CreateDatasetPage = () => {
       });
       return;
     }
+
 
     setCurrentStep(5);
     setIsGenerating(true);
@@ -675,7 +682,10 @@ export const CreateDatasetPage = () => {
             </div>
 
             <div className="flex flex-wrap gap-2.5">
-              {RECORD_PRESETS.map((cnt) => (
+              {(hasCustomApiKey()
+                ? [100, 500, 1000, 5000, 10000, 25000, 50000, 100000]
+                : [100, 500, 1000, 2500, 5000]
+              ).map((cnt) => (
                 <button
                   key={cnt}
                   onClick={() => setRecordCount(cnt)}
@@ -685,42 +695,35 @@ export const CreateDatasetPage = () => {
                       : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                   }`}
                 >
-                  {cnt.toLocaleString()} rows
+                  {cnt >= 1000 ? `${cnt / 1000}k` : cnt} rows
                 </button>
               ))}
             </div>
 
             {/* Custom record input */}
-            <div className="pt-2 flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">Custom Row Count:</span>
-              <input
-                type="number"
-                min={10}
-                max={100000}
-                value={recordCount}
-                onChange={(e) => setRecordCount(Number(e.target.value))}
-                className="px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-mono text-xs w-32"
-              />
-            </div>
-
-            {/* Normal Plan Row Limit Banner */}
-            {isNormal && recordCount > 500 && (
-              <div className="mt-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                <div className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Normal plan supports up to 500 rows per dataset.</span>
-                </div>
-                <button
-                  onClick={() => {
-                    setUpgradeModalReason("Normal plan supports up to 500 rows per dataset. Upgrade to Pro for unlimited rows.");
-                    setIsUpgradeModalOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0"
-                >
-                  Upgrade to Pro for Unlimited Rows
-                </button>
+            <div className="pt-2 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Custom Row Count:</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={hasCustomApiKey() ? 100000 : 5000}
+                  value={recordCount}
+                  onChange={(e) => setRecordCount(Number(e.target.value))}
+                  className="px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-mono text-xs w-36"
+                />
               </div>
-            )}
+
+              {hasCustomApiKey() ? (
+                <span className="text-[11px] font-semibold text-success flex items-center gap-1 bg-success/10 border border-success/20 px-3 py-1 rounded-full">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Custom API Key Active — Up to 100,000 rows unlocked
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  Standard tier max: 5,000 rows. Add custom API key in Settings to unlock up to 100,000 rows.
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Advanced Settings Accordion */}

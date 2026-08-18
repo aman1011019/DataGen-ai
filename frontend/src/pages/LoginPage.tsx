@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
-import { loginUser, loginWithGoogle, getStoredAuthState } from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
-  const activeUser = getStoredAuthState().user;
+  const location = useLocation();
+  const { signIn, signInWithGoogle, user } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -14,13 +16,7 @@ export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  useEffect(() => {
-    const authState = getStoredAuthState();
-    if (authState.isAuthenticated && authState.user && authState.user.email !== "user@datagen.ai") {
-      navigate("/dashboard");
-    }
-  }, [navigate]);
-
+  const from = (location.state as any)?.from?.pathname || "/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +33,12 @@ export const LoginPage = () => {
 
     setIsLoading(true);
     try {
-      await loginUser(email, password);
-      navigate("/dashboard");
+      try {
+        await signIn(email, password);
+      } catch (_) {
+        await loginUser(email, password);
+      }
+      navigate(from, { replace: true });
     } catch (err) {
       setErrorMsg((err as Error).message || "Authentication failed.");
     } finally {
@@ -50,7 +50,7 @@ export const LoginPage = () => {
     setIsLoading(true);
     setErrorMsg("");
     try {
-      await loginWithGoogle();
+      await signInWithGoogle();
     } catch (err) {
       setErrorMsg("Google Sign-In failed. Please try again.");
       setIsLoading(false);
@@ -59,21 +59,20 @@ export const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-primary/20">
-      {/* Top Active User Banner if already logged in */}
-      {activeUser && (
+      {user && (
         <div className="fixed top-4 right-4 z-50">
           <Link
             to="/dashboard"
             className="flex items-center gap-2.5 p-2 pr-4 rounded-full bg-card border border-border hover:border-primary/40 transition-all shadow-lg text-xs"
           >
             <img
-              src={activeUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-              alt={activeUser.name}
+              src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
+              alt={user.name}
               className="w-7 h-7 rounded-full object-cover border border-primary/30"
             />
             <div className="flex flex-col text-left">
-              <span className="font-bold text-foreground">{activeUser.name}</span>
-              <span className="text-[10px] text-muted-foreground">{activeUser.email}</span>
+              <span className="font-bold text-foreground">{user.name}</span>
+              <span className="text-[10px] text-muted-foreground">{user.email}</span>
             </div>
           </Link>
         </div>

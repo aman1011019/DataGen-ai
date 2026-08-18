@@ -1,13 +1,11 @@
-import { getAISettings } from "./aiProviderService";
-import { DEFAULT_GEMINI_API_KEY, FIREBASE_GEMINI_API_KEY } from "./defaultApiKey";
 import { getActiveUserId } from "./authService";
 
 function getDefaultUsageStorageKey(): string {
-  return `datagen_default_api_usage_${getActiveUserId()}`;
+  return `datagen_usage_window_${getActiveUserId()}`;
 }
 
 export const DEFAULT_FREE_DATASETS_LIMIT = 3;
-const RECYCLE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const RECYCLE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export interface DefaultApiCheckResult {
   allowed: boolean;
@@ -18,36 +16,24 @@ export interface DefaultApiCheckResult {
 }
 
 export interface DefaultApiUsage {
-  lastGeneratedAt: string | null;
-  count: number;
+  history: string[]; // ISO timestamp strings
 }
 
 export const hasCustomApiKey = (): boolean => {
   try {
-    const settings = getAISettings();
-    const customGemini = !!(settings.geminiApiKey && settings.geminiApiKey.trim() !== "" && settings.geminiApiKey.trim() !== FIREBASE_GEMINI_API_KEY.trim());
-    const customOpenAI = !!(settings.openaiApiKey && settings.openaiApiKey.trim());
-    const customAnthropic = !!(settings.anthropicApiKey && settings.anthropicApiKey.trim());
-
-    const activeUserId = getActiveUserId();
-    const directGemini = localStorage.getItem(`gemini_api_key_${activeUserId}`) || localStorage.getItem("gemini_api_key") || "";
-    const directOpenAI = localStorage.getItem(`openai_api_key_${activeUserId}`) || localStorage.getItem("openai_api_key") || "";
-    const directAnthropic = localStorage.getItem(`anthropic_api_key_${activeUserId}`) || localStorage.getItem("anthropic_api_key") || "";
-
-    const hasDirectCustom = 
-      (directGemini && directGemini.trim() !== "" && directGemini.trim() !== FIREBASE_GEMINI_API_KEY.trim()) ||
-      !!directOpenAI.trim() ||
-      !!directAnthropic.trim();
-
-    return Boolean(customGemini || customOpenAI || customAnthropic || hasDirectCustom);
+    const raw = localStorage.getItem("datagen_ai_settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return !!(parsed.geminiApiKey || parsed.openaiApiKey || parsed.anthropicApiKey);
+    }
   } catch (e) {
-    console.error("Error checking custom API key status", e);
-    return false;
+    console.error("Failed to check custom API key", e);
   }
+  return false;
 };
 
 export const getDefaultApiUsage = (): { 
-  lastGeneratedAt: string | null; 
+  history: string[]; 
   count: number; 
   limit: number;
   nextAvailableDate: Date | null;
@@ -58,30 +44,40 @@ export const getDefaultApiUsage = (): {
     const raw = localStorage.getItem(usageKey);
     if (raw) {
       const parsed: DefaultApiUsage = JSON.parse(raw);
-      if (parsed.lastGeneratedAt) {
-        const lastTime = new Date(parsed.lastGeneratedAt).getTime();
-        const now = Date.now();
-        const elapsed = now - lastTime;
-        if (elapsed >= RECYCLE_WINDOW_MS) {
-          localStorage.removeItem(usageKey);
-          return { lastGeneratedAt: null, count: 0, limit: DEFAULT_FREE_DATASETS_LIMIT, nextAvailableDate: null, msRemaining: 0 };
-        } else {
-          const nextDate = new Date(lastTime + RECYCLE_WINDOW_MS);
-          const msRemaining = Math.max(0, nextDate.getTime() - now);
-          return { 
-            lastGeneratedAt: parsed.lastGeneratedAt, 
-            count: Math.min(parsed.count, DEFAULT_FREE_DATASETS_LIMIT), 
-            limit: DEFAULT_FREE_DATASETS_LIMIT,
-            nextAvailableDate: nextDate,
-            msRemaining
-          };
-        }
+      const now = Date.now();
+      const validHistory = (parsed.history || []).filter(ts => {
+        return (now - new Date(ts).getTime()) < RECYCLE_WINDOW_MS;
+      });
+
+      if (validHistory.length !== (parsed.history || []).length) {
+        localStorage.setItem(usageKey, JSON.stringify({ history: validHistory }));
       }
+
+      if (validHistory.length >= DEFAULT_FREE_DATASETS_LIMIT) {
+        const oldestTime = new Date(validHistory[0]).getTime();
+        const nextDate = new Date(oldestTime + RECYCLE_WINDOW_MS);
+        const msRemaining = Math.max(0, nextDate.getTime() - now);
+        return {
+          history: validHistory,
+          count: validHistory.length,
+          limit: DEFAULT_FREE_DATASETS_LIMIT,
+          nextAvailableDate: nextDate,
+          msRemaining,
+        };
+      }
+
+      return {
+        history: validHistory,
+        count: validHistory.length,
+        limit: DEFAULT_FREE_DATASETS_LIMIT,
+        nextAvailableDate: null,
+        msRemaining: 0,
+      };
     }
   } catch (e) {
     console.error("Failed to read default API usage", e);
   }
-  return { lastGeneratedAt: null, count: 0, limit: DEFAULT_FREE_DATASETS_LIMIT, nextAvailableDate: null, msRemaining: 0 };
+  return { history: [], count: 0, limit: DEFAULT_FREE_DATASETS_LIMIT, nextAvailableDate: null, msRemaining: 0 };
 };
 
 export const formatCountdownMs = (ms: number): string => {
@@ -99,7 +95,21 @@ export const formatCountdownMs = (ms: number): string => {
 };
 
 export const checkDefaultApiLimit = (requestedRows: number): DefaultApiCheckResult => {
-  if (hasCustomApiKey()) {
+  const isCustom = hasCustomApiKey();
+  const maxLimit = isCustom ? 100000 : 5000;
+
+  if (requestedRows > maxLimit) {
+    return {
+      allowed: false,
+      isCustomKey: isCustom,
+      reason: "row_limit",
+      message: isCustom
+        ? `Maximum ${maxLimit.toLocaleString()} rows allowed per dataset with custom API key.`
+        : "Maximum 5,000 rows are allowed on standard free tier. Add your custom API key in Settings to generate up to 100,000 rows.",
+    };
+  }
+
+  if (isCustom) {
     return { allowed: true, isCustomKey: true };
   }
 
@@ -120,16 +130,7 @@ export const checkDefaultApiLimit = (requestedRows: number): DefaultApiCheckResu
       isCustomKey: false,
       reason: "cooldown",
       nextAvailableDate: usage.nextAvailableDate,
-      message: `You have reached the default API key limit (${DEFAULT_FREE_DATASETS_LIMIT} free datasets). Recycling reset available on ${unlockStr}. Add your own custom API key in Settings to unlock unlimited generation with no cooldown!`,
-    };
-  }
-
-  if (requestedRows > 5000) {
-    return {
-      allowed: false,
-      isCustomKey: false,
-      reason: "row_limit",
-      message: "The dataset limit for the default API key is 5,000 records. Please reduce your row count to 5,000 or add your own API key in Settings for unlimited records!",
+      message: `Weekly generation limit reached (3 datasets per 7 days). Next dataset generation will reset on ${unlockStr}. Add your own API key in Settings for unlimited generations.`,
     };
   }
 
@@ -137,19 +138,12 @@ export const checkDefaultApiLimit = (requestedRows: number): DefaultApiCheckResu
 };
 
 export const recordDefaultApiUsage = (): void => {
-  if (hasCustomApiKey()) {
-    return;
-  }
-
+  if (hasCustomApiKey()) return; // Don't count against free quota if custom key is used
+  const usageKey = getDefaultUsageStorageKey();
   const current = getDefaultApiUsage();
-  const nextCount = current.count + 1;
-  const data: DefaultApiUsage = {
-    lastGeneratedAt: current.lastGeneratedAt || new Date().toISOString(),
-    count: nextCount,
-  };
-
+  const newHistory = [...current.history, new Date().toISOString()];
   try {
-    localStorage.setItem(getDefaultUsageStorageKey(), JSON.stringify(data));
+    localStorage.setItem(usageKey, JSON.stringify({ history: newHistory }));
   } catch (e) {
     console.error("Failed to record default API usage", e);
   }

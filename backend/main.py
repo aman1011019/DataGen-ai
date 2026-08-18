@@ -8,27 +8,29 @@ from typing import Optional
 try:
     from .models import (
         GenerationRequest, GenerationResponse, CreateOrderRequest, CreateOrderResponse,
-        VerifyPaymentRequest, CancelSubscriptionRequest, ChangePlanRequest, PlanType
+        VerifyPaymentRequest, CancelSubscriptionRequest, ChangePlanRequest, PlanType,
+        AISchemaRequest, AISchemaResponse, AISuggestFieldsRequest, AISuggestFieldsResponse, UsageEligibilityResponse
     )
-    from .generator import generate_samples
+    from .generator import generate_samples, generate_schema_ai, suggest_fields_ai
     from .validator import validate_batch, compute_stats
     from .billing import (
         check_subscription_limits, record_dataset_creation, record_default_api_dataset_creation,
         create_checkout_order, verify_payment_and_activate, cancel_user_subscription, get_user_subscription,
-        get_user_usage, get_user_invoices, process_webhook_payload
+        get_user_usage, get_user_invoices, process_webhook_payload, get_generation_eligibility
     )
     from .prompts import get_schema_creation_prompt, SCHEMA_CREATION_PROMPT
 except ImportError:
     from models import (
         GenerationRequest, GenerationResponse, CreateOrderRequest, CreateOrderResponse,
-        VerifyPaymentRequest, CancelSubscriptionRequest, ChangePlanRequest, PlanType
+        VerifyPaymentRequest, CancelSubscriptionRequest, ChangePlanRequest, PlanType,
+        AISchemaRequest, AISchemaResponse, AISuggestFieldsRequest, AISuggestFieldsResponse, UsageEligibilityResponse
     )
-    from generator import generate_samples
+    from generator import generate_samples, generate_schema_ai, suggest_fields_ai
     from validator import validate_batch, compute_stats
     from billing import (
         check_subscription_limits, record_dataset_creation, record_default_api_dataset_creation,
         create_checkout_order, verify_payment_and_activate, cancel_user_subscription, get_user_subscription,
-        get_user_usage, get_user_invoices, process_webhook_payload
+        get_user_usage, get_user_invoices, process_webhook_payload, get_generation_eligibility
     )
     from prompts import get_schema_creation_prompt, SCHEMA_CREATION_PROMPT
 
@@ -48,7 +50,7 @@ def root():
     return {
         "status": "DataGen SaaS Platform API is running 🚀",
         "version": "2.4.0",
-        "billingEngine": "Razorpay + Subscription Enforcement Active"
+        "limits": "3 datasets per 7 days, max 5000 rows/dataset"
     }
 
 @app.get("/api/schema-prompt")
@@ -60,6 +62,32 @@ def get_schema_prompt(format: Optional[str] = "postgresql"):
         "prompt": get_schema_creation_prompt(format),
         "raw_base_prompt": SCHEMA_CREATION_PROMPT
     }
+
+# ==================== SERVER-SIDE AI & USAGE ENDPOINTS ====================
+@app.post("/api/ai/schema", response_model=AISchemaResponse)
+async def api_generate_schema(req: AISchemaRequest):
+    fields = await generate_schema_ai(req.category, req.prompt or "")
+    return AISchemaResponse(
+        status="success",
+        category=req.category,
+        fields=fields
+    )
+
+@app.post("/api/ai/suggest-fields", response_model=AISuggestFieldsResponse)
+async def api_suggest_fields(req: AISuggestFieldsRequest):
+    existing_dicts = [f.model_dump() if hasattr(f, "model_dump") else dict(f) for f in req.existing_fields]
+    suggestions = await suggest_fields_ai(req.category, existing_dicts)
+    return AISuggestFieldsResponse(
+        status="success",
+        suggestions=suggestions
+    )
+
+@app.get("/api/usage/eligibility", response_model=UsageEligibilityResponse)
+def api_usage_eligibility(user_email: Optional[str] = None):
+    user_id = user_email.replace("@", "_").replace(".", "_").lower() if user_email else "anonymous"
+    res = get_generation_eligibility(user_id)
+    return UsageEligibilityResponse(**res)
+
 
 # ==================== DATASET GENERATION ENDPOINT ====================
 @app.post("/generate", response_model=GenerationResponse)

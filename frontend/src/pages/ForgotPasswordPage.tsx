@@ -1,40 +1,51 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import Logo from "@/components/Logo";
-import { getStoredAuthState } from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
 
 export const ForgotPasswordPage = () => {
-  const activeUser = getStoredAuthState().user;
+  const { resetPassword, user } = useAuth();
+
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !email.includes("@")) {
+      setErrorMsg("Please enter a valid work email.");
+      return;
+    }
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setIsLoading(false);
-    setIsSubmitted(true);
+    setErrorMsg("");
+    try {
+      await resetPassword(email);
+      setIsSubmitted(true);
+    } catch (err) {
+      setErrorMsg((err as Error).message || "Failed to send reset password link.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-primary/20">
-      {activeUser && (
+      {user && (
         <div className="fixed top-4 right-4 z-50">
           <Link
             to="/dashboard"
             className="flex items-center gap-2.5 p-2 pr-4 rounded-full bg-card border border-border hover:border-primary/40 transition-all shadow-lg text-xs"
           >
             <img
-              src={activeUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-              alt={activeUser.name}
+              src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
+              alt={user.name}
               className="w-7 h-7 rounded-full object-cover border border-primary/30"
             />
             <div className="flex flex-col text-left">
-              <span className="font-bold text-foreground">{activeUser.name}</span>
-              <span className="text-[10px] text-muted-foreground">{activeUser.email}</span>
+              <span className="font-bold text-foreground">{user.name}</span>
+              <span className="text-[10px] text-muted-foreground">{user.email}</span>
             </div>
           </Link>
         </div>
@@ -51,6 +62,13 @@ export const ForgotPasswordPage = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+          {errorMsg && (
+            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {isSubmitted ? (
             <div className="text-center space-y-4 py-4">
               <CheckCircle2 className="w-12 h-12 text-success mx-auto" />

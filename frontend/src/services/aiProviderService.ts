@@ -1,145 +1,36 @@
 import { AISettings, DatasetCategory, FieldDefinition, FieldType } from "../types/dataset";
 import { CATEGORIES_DATA } from "../data/categories";
-import { DEFAULT_GEMINI_API_KEY, FIREBASE_GEMINI_API_KEY } from "./defaultApiKey";
-import { getActiveUserId } from "./authService";
-
-function getAISettingsKey(): string {
-  return `datagen_ai_settings_${getActiveUserId()}`;
-}
-
-function getGeminiKeyStorageName(): string {
-  return `gemini_api_key_${getActiveUserId()}`;
-}
-
-function getOpenAIKeyStorageName(): string {
-  return `openai_api_key_${getActiveUserId()}`;
-}
-
-function getAnthropicKeyStorageName(): string {
-  return `anthropic_api_key_${getActiveUserId()}`;
-}
 
 export const getAISettings = (): AISettings => {
-  const settingsKey = getAISettingsKey();
-  try {
-    const raw = localStorage.getItem(settingsKey);
-    if (raw) {
-      const parsed: AISettings = JSON.parse(raw);
-      if (parsed.geminiApiKey === FIREBASE_GEMINI_API_KEY) {
-        parsed.geminiApiKey = "";
-      }
-      return parsed;
-    }
-  } catch (e) {
-    console.error("Failed to load user AI settings", e);
-  }
-
-  const storedGemini = localStorage.getItem(getGeminiKeyStorageName()) || "";
-  const cleanGemini = storedGemini === FIREBASE_GEMINI_API_KEY ? "" : storedGemini;
-
   return {
-    provider: "Google Gemini",
-    geminiApiKey: cleanGemini,
-    openaiApiKey: localStorage.getItem(getOpenAIKeyStorageName()) || "",
-    anthropicApiKey: localStorage.getItem(getAnthropicKeyStorageName()) || "",
-    selectedModel: "gemini-1.5-flash",
+    provider: "Google Gemini (Server)",
+    geminiApiKey: "••••••••",
+    openaiApiKey: "",
+    anthropicApiKey: "",
+    selectedModel: "gemini-2.5-flash",
   };
 };
 
-export const saveAISettings = (settings: AISettings): void => {
-  try {
-    const cleanSettings: AISettings = {
-      ...settings,
-      geminiApiKey: (settings.geminiApiKey || "").trim() === FIREBASE_GEMINI_API_KEY ? "" : (settings.geminiApiKey || "").trim(),
-      openaiApiKey: (settings.openaiApiKey || "").trim(),
-      anthropicApiKey: (settings.anthropicApiKey || "").trim(),
-    };
-
-    localStorage.setItem(getAISettingsKey(), JSON.stringify(cleanSettings));
-
-    const geminiKeyName = getGeminiKeyStorageName();
-    if (cleanSettings.geminiApiKey) {
-      localStorage.setItem(geminiKeyName, cleanSettings.geminiApiKey);
-    } else {
-      localStorage.removeItem(geminiKeyName);
-    }
-
-    const openaiKeyName = getOpenAIKeyStorageName();
-    if (cleanSettings.openaiApiKey) {
-      localStorage.setItem(openaiKeyName, cleanSettings.openaiApiKey);
-    } else {
-      localStorage.removeItem(openaiKeyName);
-    }
-
-    const anthropicKeyName = getAnthropicKeyStorageName();
-    if (cleanSettings.anthropicApiKey) {
-      localStorage.setItem(anthropicKeyName, cleanSettings.anthropicApiKey);
-    } else {
-      localStorage.removeItem(anthropicKeyName);
-    }
-  } catch (e) {
-    console.error("Failed to save user AI settings", e);
-  }
+export const saveAISettings = (_settings: AISettings): void => {
+  // AI models run securely on the server
 };
 
 export const generateSchemaFromAI = async (
   category: DatasetCategory,
   userPrompt: string
 ): Promise<FieldDefinition[]> => {
-  const settings = getAISettings();
-  const apiKey =
-    (settings.provider === "Google Gemini"
-      ? settings.geminiApiKey
-      : settings.provider === "OpenAI"
-      ? settings.openaiApiKey
-      : settings.anthropicApiKey) || FIREBASE_GEMINI_API_KEY;
-
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `You are an expert AI data architect. Generate a clean synthetic dataset schema for the category "${category}".
-User Requirement Prompt: "${userPrompt || "Standard realistic dataset schema"}"
-
-Return strictly valid JSON array without markdown backticks:
-[
-  {
-    "name": "snake_case_field_name",
-    "type": "String" | "Integer" | "Float" | "Boolean" | "Date" | "DateTime" | "Email" | "Phone" | "UUID" | "URL" | "Enum" | "Currency" | "Percentage" | "Address" | "Name" | "Company" | "Custom",
-    "description": "Short explanation",
-    "required": true,
-    "nullable": false,
-    "syntheticStrategy": "realistic_distribution" | "unique_identifier" | "categorical" | "sequence" | "range" | "pattern" | "correlated" | "gaussian",
-    "constraints": {
-      "min": 1,
-      "max": 100,
-      "options": ["Option A", "Option B"]
-    }
-  }
-]`
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
+    const response = await fetch("/api/ai/schema", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, prompt: userPrompt }),
+    });
 
     if (response.ok) {
       const data = await response.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(cleanJson);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((f: any, idx: number) => ({
-          id: `ai_${Date.now()}_${idx}`,
+      if (data && Array.isArray(data.fields) && data.fields.length > 0) {
+        return data.fields.map((f: any, idx: number) => ({
+          id: f.id || `ai_srv_${Date.now()}_${idx}`,
           name: f.name || `field_${idx}`,
           type: normalizeType(f.type),
           description: f.description || "AI Generated field",
@@ -151,15 +42,14 @@ Return strictly valid JSON array without markdown backticks:
       }
     }
   } catch (err) {
-    console.warn("Gemini API call failed, using intelligent schema synthesis fallback", err);
+    console.warn("Server AI schema call notice:", err);
   }
 
   // Fallback intelligent schema generator
-  await new Promise((res) => setTimeout(res, 600));
   const catData = CATEGORIES_DATA.find((c) => c.id === category) || CATEGORIES_DATA[0];
   let baseFields = [...catData.recommendedFields];
 
-  const lowerPrompt = userPrompt.toLowerCase();
+  const lowerPrompt = (userPrompt || "").toLowerCase();
   if (lowerPrompt.includes("churn") && !baseFields.some((f) => f.name.includes("churn"))) {
     baseFields.push({
       id: `inf_${Date.now()}_1`,
@@ -180,7 +70,35 @@ export const suggestMoreFieldsAI = async (
   existingFields: FieldDefinition[],
   category: DatasetCategory
 ): Promise<FieldDefinition[]> => {
-  await new Promise((res) => setTimeout(res, 500));
+  try {
+    const response = await fetch("/api/ai/suggest-fields", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, existing_fields: existingFields }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        const existingNames = new Set(existingFields.map((f) => f.name.toLowerCase()));
+        return data.suggestions
+          .map((f: any, idx: number) => ({
+            id: f.id || `sug_${Date.now()}_${idx}`,
+            name: f.name || `suggested_field_${idx}`,
+            type: normalizeType(f.type),
+            description: f.description || "AI Suggested field",
+            required: f.required !== false,
+            nullable: !!f.nullable,
+            syntheticStrategy: f.syntheticStrategy || "realistic_distribution",
+            constraints: f.constraints || {},
+          }))
+          .filter((c: FieldDefinition) => !existingNames.has(c.name.toLowerCase()));
+      }
+    }
+  } catch (err) {
+    console.warn("Server AI suggest fields notice:", err);
+  }
+
   const existingNames = new Set(existingFields.map((f) => f.name.toLowerCase()));
   const candidates: FieldDefinition[] = [
     {
@@ -204,13 +122,13 @@ export const suggestMoreFieldsAI = async (
     },
     {
       id: `sug_${Date.now()}_3`,
-      name: "ip_address",
-      type: "Custom",
-      description: "Client IP connection address",
-      required: false,
-      nullable: true,
-      syntheticStrategy: "pattern",
-      constraints: { pattern: "192.168.#.#" },
+      name: "compliance_status",
+      type: "Enum",
+      description: "Regulatory compliance verification state",
+      required: true,
+      nullable: false,
+      syntheticStrategy: "categorical",
+      constraints: { options: ["Compliant", "Non-Compliant", "Under Review"] },
     },
   ];
   return candidates.filter((c) => !existingNames.has(c.name.toLowerCase()));

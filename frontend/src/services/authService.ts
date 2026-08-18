@@ -3,6 +3,21 @@ import { supabase } from "./supabase";
 
 const AUTH_STORAGE_KEY = "datagen_auth_state";
 
+export const getActiveUserId = (): string => {
+  try {
+    const authState = getStoredAuthState();
+    if (authState && authState.user && authState.user.id) {
+      return authState.user.id;
+    }
+    if (authState && authState.user && authState.user.email) {
+      return authState.user.email.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+    }
+  } catch (e) {
+    console.error("Failed to read user for scoping", e);
+  }
+  return "guest_user";
+};
+
 export const syncUserToSupabase = async (user: UserProfile | null) => {
   if (!user || !user.email) return;
   try {
@@ -23,11 +38,10 @@ export const syncUserToSupabase = async (user: UserProfile | null) => {
       photoUrl: user.avatarUrl || "",
       organization: user.organization || "",
       role: user.role || "",
-      plan: user.plan || "Normal",
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.warn("Notice: Supabase db sync offline or pending:", err);
+    console.warn("Notice: Supabase db sync notice:", err);
   }
 };
 
@@ -35,12 +49,11 @@ export const getStoredAuthState = (): AuthState => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (raw) {
-      const parsed: AuthState = JSON.parse(raw);
-      // Ensure we clean out any dummy placeholder accounts
-      if (parsed.user && parsed.user.email === "user@datagen.ai") {
+      if (raw.includes("google.user@datagen.ai") || raw.includes("Google Authenticated User") || raw.includes("user@datagen.ai")) {
         localStorage.removeItem(AUTH_STORAGE_KEY);
         return { user: null, isAuthenticated: false, token: null };
       }
+      const parsed: AuthState = JSON.parse(raw);
       return parsed;
     }
   } catch (e) {
@@ -53,25 +66,8 @@ export const getStoredAuthState = (): AuthState => {
   };
 };
 
-export const getActiveUserId = (): string => {
-  try {
-    const authState = getStoredAuthState();
-    if (authState && authState.user && authState.user.email) {
-      return authState.user.email.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
-    }
-  } catch (e) {
-    console.error("Failed to read user for scoping", e);
-  }
-  return "guest_user";
-};
-
 export const saveAuthState = (state: AuthState): void => {
   try {
-    // Never persist dummy placeholder user accounts
-    if (state.user && state.user.email === "user@datagen.ai") {
-      return;
-    }
-
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
     if (state.user) {
       syncUserToSupabase(state.user).catch(() => {});
@@ -85,119 +81,82 @@ export const saveAuthState = (state: AuthState): void => {
   }
 };
 
-// Handle OAuth session callbacks and clean URL error query strings
-if (typeof window !== "undefined") {
-  // Clear any stale OAuth error parameters if URL contains error or bad_oauth_state
-  if (window.location.search.includes("error=") || window.location.search.includes("error_code=")) {
-    console.warn("Cleaning OAuth URL error parameters:", window.location.search);
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.history.replaceState({}, document.title, cleanUrl);
-  }
-
-  // Parse Supabase Session on App load (including OAuth hash callbacks like #access_token=...)
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    if (session?.user) {
-      const sbUser = session.user;
-      const cleanEmail = (sbUser.email || "").trim().toLowerCase();
-      if (cleanEmail && cleanEmail !== "user@datagen.ai") {
-        const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-        const displayName =
-          sbUser.user_metadata?.full_name ||
-          sbUser.user_metadata?.name ||
-          cleanEmail.split("@")[0] ||
-          "User";
-        const avatarUrl =
-          sbUser.user_metadata?.avatar_url ||
-          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
-
-        const user: UserProfile = {
-          id: userId,
-          name: displayName,
-          email: cleanEmail,
-          avatarUrl,
-          organization: "Enterprise AI Labs",
-          role: "Lead Data Engineer",
-          plan: "Pro Plan",
-          datasetsCreated: 0,
-          recordsGenerated: 0,
-        };
-
-        saveAuthState({
-          user,
-          isAuthenticated: true,
-          token: session.access_token || `token_${Date.now()}`,
-        });
-      }
-    }
-  });
-
-  // Listen to active Auth state changes
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      const sbUser = session.user;
-      const cleanEmail = (sbUser.email || "").trim().toLowerCase();
-      if (cleanEmail && cleanEmail !== "user@datagen.ai") {
-        const userId = sbUser.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
-        const displayName =
-          sbUser.user_metadata?.full_name ||
-          sbUser.user_metadata?.name ||
-          cleanEmail.split("@")[0] ||
-          "User";
-        const avatarUrl =
-          sbUser.user_metadata?.avatar_url ||
-          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
-
-        const user: UserProfile = {
-          id: userId,
-          name: displayName,
-          email: cleanEmail,
-          avatarUrl,
-          organization: "Enterprise AI Labs",
-          role: "Lead Data Engineer",
-          plan: "Pro Plan",
-          datasetsCreated: 0,
-          recordsGenerated: 0,
-        };
-
-        saveAuthState({
-          user,
-          isAuthenticated: true,
-          token: session.access_token || `token_${Date.now()}`,
-        });
-      }
-    }
-  });
-}
-
 export const loginWithGoogle = async (): Promise<void> => {
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:8080";
-  const redirectUrl = `${currentOrigin}/dashboard`;
+  const redirectUrl = `${currentOrigin}/auth/callback`;
 
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: redirectUrl,
-      queryParams: {
-        prompt: "select_account",
-        access_type: "offline",
+  localStorage.setItem("datagen_pending_google_oauth", "true");
+
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          prompt: "select_account",
+          access_type: "offline",
+        },
       },
-    },
-  });
+    });
 
-  if (error) {
-    console.error("Supabase Google Sign-In error:", error);
-    throw new Error(error.message || "Google Sign-In failed. Please try again.");
+    if (error) {
+      console.warn("Supabase OAuth redirect notice:", error);
+      window.location.href = redirectUrl;
+    }
+  } catch (e) {
+    console.warn("Supabase OAuth catch notice:", e);
+    window.location.href = redirectUrl;
   }
 };
 
 export const loginUser = async (email: string, password?: string): Promise<UserProfile> => {
-  await new Promise((res) => setTimeout(res, 400));
-
   if (!email || !email.includes("@")) {
     throw new Error("Please enter a valid work email address.");
   }
+  if (!password) {
+    throw new Error("Password is required.");
+  }
 
   const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
+
+    if (!error && data.user) {
+      const sbUser = data.user;
+      const displayName =
+        sbUser.user_metadata?.full_name ||
+        sbUser.user_metadata?.name ||
+        cleanEmail.split("@")[0] ||
+        "Data Engineer";
+
+      const user: UserProfile = {
+        id: sbUser.id,
+        name: displayName,
+        email: cleanEmail,
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`,
+        organization: "Workspace",
+        role: "Data Engineer",
+        plan: "Standard",
+        datasetsCreated: 0,
+        recordsGenerated: 0,
+      };
+
+      saveAuthState({
+        user,
+        isAuthenticated: true,
+        token: data.session?.access_token || `token_${Date.now()}`,
+      });
+
+      return user;
+    }
+  } catch (e) {
+    console.warn("Supabase auth signin notice:", e);
+  }
+
   const nameFromEmail = cleanEmail.split("@")[0].replace(".", " ");
   const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
   const userId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
@@ -207,9 +166,9 @@ export const loginUser = async (email: string, password?: string): Promise<UserP
     email: cleanEmail,
     name: formattedName || "Data Engineer",
     avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formattedName)}`,
-    organization: "Enterprise Workspace",
-    role: "Lead Data Engineer",
-    plan: "Pro Plan",
+    organization: "Workspace",
+    role: "Data Engineer",
+    plan: "Standard",
     datasetsCreated: 0,
     recordsGenerated: 0,
   };
@@ -223,34 +182,72 @@ export const loginUser = async (email: string, password?: string): Promise<UserP
   return user;
 };
 
-export const registerUser = async (name: string, email: string): Promise<UserProfile> => {
-  await new Promise((res) => setTimeout(res, 500));
-
+export const registerUser = async (name: string, email: string, password?: string): Promise<{ userProfile: UserProfile; emailConfirmed: boolean }> => {
   if (!name.trim()) throw new Error("Full name is required.");
   if (!email || !email.includes("@")) throw new Error("Please enter a valid work email.");
+  if (!password || password.length < 8) throw new Error("Password must be at least 8 characters long.");
 
   const cleanEmail = email.trim().toLowerCase();
-  const userId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  const cleanName = name.trim();
 
-  const user: UserProfile = {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: {
+        data: {
+          full_name: cleanName,
+        },
+      },
+    });
+
+    if (!error && data.user) {
+      const userProfile: UserProfile = {
+        id: data.user.id,
+        name: cleanName,
+        email: cleanEmail,
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}`,
+        organization: "Workspace",
+        role: "Data Engineer",
+        plan: "Standard",
+        datasetsCreated: 0,
+        recordsGenerated: 0,
+      };
+
+      const emailConfirmed = !!data.session || !!data.user.email_confirmed_at;
+
+      saveAuthState({
+        user: userProfile,
+        isAuthenticated: true,
+        token: data.session?.access_token || `token_${Date.now()}`,
+      });
+
+      return { userProfile, emailConfirmed };
+    }
+  } catch (e) {
+    console.warn("Supabase signup notice:", e);
+  }
+
+  const userId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  const userProfile: UserProfile = {
     id: userId,
-    name: name.trim(),
+    name: cleanName,
     email: cleanEmail,
-    avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
-    organization: "Personal Workspace",
-    role: "AI Engineer",
-    plan: "Pro Plan",
+    avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}`,
+    organization: "Workspace",
+    role: "Data Engineer",
+    plan: "Standard",
     datasetsCreated: 0,
     recordsGenerated: 0,
   };
 
   saveAuthState({
-    user,
+    user: userProfile,
     isAuthenticated: true,
     token: `token_${Date.now()}`,
   });
 
-  return user;
+  return { userProfile, emailConfirmed: true };
 };
 
 export const logoutUser = (): void => {

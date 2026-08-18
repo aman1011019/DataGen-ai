@@ -11,11 +11,10 @@ import {
   ClipboardCheck,
   LogOut,
   X,
-  HelpCircle
+  ShieldCheck
 } from "lucide-react";
 import Logo from "@/components/Logo";
-import { getStoredAuthState, logoutUser } from "../services/authService";
-import SubscriptionBadge from "./billing/SubscriptionBadge";
+import { useAuth } from "../hooks/useAuth";
 
 const navItems = [
   { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -36,19 +35,11 @@ interface DashboardSidebarProps {
 export const DashboardSidebar = ({ isMobileOpen, onCloseMobile }: DashboardSidebarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState(getStoredAuthState().user);
+  const { user, signOut } = useAuth();
 
-  useEffect(() => {
-    const handleAuthChange = () => {
-      setUser(getStoredAuthState().user);
-    };
-    window.addEventListener("datagen_auth_changed", handleAuthChange);
-    return () => window.removeEventListener("datagen_auth_changed", handleAuthChange);
-  }, []);
-
-  const handleLogout = () => {
-    logoutUser();
-    navigate("/login");
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
   };
 
   const sidebarContent = (
@@ -106,13 +97,15 @@ export const DashboardSidebar = ({ isMobileOpen, onCloseMobile }: DashboardSideb
         })}
       </nav>
 
-      {/* Bottom Profile Section - STRICTLY PINNED AT THE BOTTOM OF THE SIDEBAR */}
+      {/* Bottom Profile Section */}
       <div className="shrink-0 p-3 border-t border-sidebar-border bg-sidebar-accent/50 space-y-2.5 w-full">
         <div className="flex items-center justify-between px-2 text-xs">
-          <RouterNavLink to="/settings/billing" className="text-muted-foreground flex items-center gap-1.5 text-[11px] hover:text-foreground">
-            <HelpCircle className="w-3.5 h-3.5" /> Billing Plan
-          </RouterNavLink>
-          <SubscriptionBadge />
+          <span className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+            <ShieldCheck className="w-3.5 h-3.5 text-success" /> Standard Quota
+          </span>
+          <span className="text-[10px] font-bold text-primary px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+            3/wk limit
+          </span>
         </div>
 
         {/* Profile Card pinned at bottom */}
@@ -125,10 +118,10 @@ export const DashboardSidebar = ({ isMobileOpen, onCloseMobile }: DashboardSideb
             />
             <div className="flex flex-col truncate">
               <span className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                {user?.name || "Google user"}
+                {user?.name || "Workspace User"}
               </span>
               <span className="text-[10px] text-muted-foreground truncate">
-                {user?.email || "Not signed in"}
+                {user?.email || "Signed in"}
               </span>
             </div>
           </div>
@@ -143,6 +136,7 @@ export const DashboardSidebar = ({ isMobileOpen, onCloseMobile }: DashboardSideb
       </div>
     </div>
   );
+
 
   return (
     <>

@@ -90,8 +90,9 @@ export const generateSyntheticDataset = async (
   const effectiveSeed = settings.seed && settings.seed !== 42 ? settings.seed : runEntropy;
   const rng = new SeededRandom(effectiveSeed);
 
-  // Exact user requested record count
-  const countToGenerate = Math.max(recordCount || 5000, 10);
+  // Exact user requested record count (capped at 100,000 with custom key, 5,000 on standard free)
+  const maxLimit = hasCustomApiKey() ? 100000 : 5000;
+  const countToGenerate = Math.min(Math.max(recordCount || 1000, 10), maxLimit);
   
   // Progress status notifications
   const stages = [

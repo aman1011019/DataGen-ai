@@ -62,6 +62,86 @@ async def generate_with_gemini(prompt: str, api_key: str) -> str:
     response = model.generate_content(prompt)
     return response.text
 
+async def generate_schema_ai(category: str, user_prompt: str) -> List[dict]:
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    prompt = f"""You are an expert AI data architect. Generate a clean synthetic dataset schema for the category "{category}".
+User Requirement Prompt: "{user_prompt or 'Standard realistic dataset schema'}"
+
+Return strictly valid JSON array without markdown backticks:
+[
+  {{
+    "name": "snake_case_field_name",
+    "type": "String" | "Integer" | "Float" | "Boolean" | "Date" | "DateTime" | "Email" | "Phone" | "UUID" | "URL" | "Enum" | "Currency" | "Percentage" | "Address" | "Name" | "Company" | "Custom",
+    "description": "Short explanation",
+    "required": true,
+    "nullable": false,
+    "syntheticStrategy": "realistic_distribution",
+    "constraints": {{
+      "min": 1,
+      "max": 100,
+      "options": ["Option A", "Option B"]
+    }}
+  }}
+]"""
+    try:
+        if api_key:
+            raw = await generate_with_gemini(prompt, api_key)
+            cleaned = clean_json_response(raw)
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                for idx, f in enumerate(parsed):
+                    if "id" not in f:
+                        f["id"] = f"ai_srv_{int(time.time())}_{idx}"
+                return parsed
+    except Exception as e:
+        print(f"ℹ️ Server AI schema notice: {e}. Using structured fallback schema.")
+
+    # Fallback schema
+    return [
+        {"id": f"srv_fld_1", "name": "record_id", "type": "UUID", "description": "Unique record identifier", "required": True, "nullable": False, "syntheticStrategy": "unique_identifier", "constraints": {}},
+        {"id": f"srv_fld_2", "name": "full_name", "type": "Name", "description": "Subject or customer name", "required": True, "nullable": False, "syntheticStrategy": "realistic_distribution", "constraints": {}},
+        {"id": f"srv_fld_3", "name": "email_address", "type": "Email", "description": "Contact email address", "required": True, "nullable": False, "syntheticStrategy": "realistic_distribution", "constraints": {}},
+        {"id": f"srv_fld_4", "name": "status", "type": "Enum", "description": "Lifecycle status", "required": True, "nullable": False, "syntheticStrategy": "categorical", "constraints": {"options": ["Active", "Pending", "Completed", "Archived"]}},
+        {"id": f"srv_fld_5", "name": "score_metric", "type": "Float", "description": "Computed quantitative score", "required": True, "nullable": False, "syntheticStrategy": "gaussian", "constraints": {"min": 0.0, "max": 100.0}},
+        {"id": f"srv_fld_6", "name": "created_at", "type": "DateTime", "description": "Record timestamp", "required": True, "nullable": False, "syntheticStrategy": "range", "constraints": {}},
+    ]
+
+async def suggest_fields_ai(category: str, existing_fields: List[dict]) -> List[dict]:
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    existing_names = [f.get("name", "") for f in existing_fields]
+    prompt = f"""You are an AI data architect. Suggest 3 additional relevant fields for a "{category}" synthetic dataset.
+Existing field names: {json.dumps(existing_names)}
+
+Return strictly valid JSON array:
+[
+  {{
+    "id": "sug_1",
+    "name": "recommended_field_name",
+    "type": "String" | "Integer" | "Float" | "Boolean" | "Enum" | "DateTime",
+    "description": "Short explanation",
+    "required": true,
+    "nullable": false,
+    "syntheticStrategy": "realistic_distribution",
+    "constraints": {{}}
+  }}
+]"""
+    try:
+        if api_key:
+            raw = await generate_with_gemini(prompt, api_key)
+            cleaned = clean_json_response(raw)
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return parsed
+    except Exception as e:
+        print(f"ℹ️ Server AI suggest notice: {e}.")
+
+    return [
+        {"id": f"sug_srv_1", "name": "risk_tier", "type": "Enum", "description": "Assessed risk classification", "required": True, "nullable": False, "syntheticStrategy": "categorical", "constraints": {"options": ["Low", "Medium", "High", "Critical"]}},
+        {"id": f"sug_srv_2", "name": "updated_at", "type": "DateTime", "description": "Last update timestamp", "required": True, "nullable": False, "syntheticStrategy": "range", "constraints": {}},
+        {"id": f"sug_srv_3", "name": "compliance_flag", "type": "Boolean", "description": "Regulatory compliance check", "required": True, "nullable": False, "syntheticStrategy": "realistic_distribution", "constraints": {}},
+    ]
+
+
 
 async def generate_samples(req: GenerationRequest) -> List[DataSample]:
     prompt = get_prompt(

@@ -159,7 +159,7 @@ export const SettingsPage = () => {
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Leave empty to use the system default API key (limit 3 free datasets). Adding your own API key unlocks unlimited dataset generations with no cooldown.
+                  AI model execution runs securely on the server. Server API keys remain protected and are never exposed to the client browser.
                 </p>
               </div>
             )}

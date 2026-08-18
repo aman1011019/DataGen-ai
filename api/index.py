@@ -1,16 +1,17 @@
 import sys
 import os
 
-# Add parent directory and backend directory to sys.path
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-BACKEND_DIR = os.path.join(BASE_DIR, "backend")
+# Add root directory and backend directory to Python module search path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+backend_dir = os.path.join(parent_dir, "backend")
 
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
 from backend.main import app
 
-# Export ASGI app for Vercel
-app = app
+# Export FastAPI app for Vercel Serverless Function deployment
+__all__ = ["app"]

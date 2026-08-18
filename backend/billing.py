@@ -67,45 +67,63 @@ def record_dataset_creation(user_id: str, rows: int):
     usage.rowsGenerated += rows
     usage.updatedAt = datetime.now(timezone.utc)
 
-_default_usage_db: Dict[str, dict] = {}
+_user_generations_db: Dict[str, List[datetime]] = {}
+
+def get_generation_eligibility(user_id: str) -> dict:
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+
+    timestamps = _user_generations_db.get(user_id, [])
+    # Filter timestamps to last 7 days
+    recent = [ts for ts in timestamps if ts > seven_days_ago]
+    _user_generations_db[user_id] = recent
+
+    used_count = len(recent)
+    remaining = max(0, 3 - used_count)
+
+    if used_count >= 3:
+        oldest_recent = min(recent)
+        window_end = oldest_recent + timedelta(days=7)
+        return {
+            "allowed": False,
+            "reason": "WEEKLY_LIMIT_REACHED",
+            "remainingDatasets": 0,
+            "windowEnd": window_end.isoformat(),
+            "message": f"Weekly limit reached (3 datasets per 7 days). Next dataset available on {window_end.strftime('%b %d, %Y at %H:%M UTC')}."
+        }
+
+    return {
+        "allowed": True,
+        "remainingDatasets": remaining,
+        "windowEnd": None,
+        "message": f"You have {remaining} dataset generation(s) remaining in this 7-day window."
+    }
 
 def check_subscription_limits(user_id: str, requested_rows: int, is_new_dataset: bool = True, is_custom_api_key: bool = False):
-    if is_custom_api_key:
-        # Custom API key active — bypass default limits & 1-week cooldown!
-        return
-
-    # Using Default API key
-    if requested_rows > 5000:
+    max_limit = 100000 if is_custom_api_key else 5000
+    if requested_rows > max_limit:
         raise HTTPException(
             status_code=400,
-            detail="Dataset limit is 5,000 records when using the default API key. Please reduce record count to 5,000 or add your custom API key in Settings!"
+            detail={
+                "error": "ROW_LIMIT_EXCEEDED",
+                "message": f"Maximum {max_limit:,} rows allowed per dataset."
+            }
         )
 
-    now = datetime.now(timezone.utc)
-    usage = _default_usage_db.get(user_id)
-    if usage and usage.get("last_generated_at"):
-        last_time = usage["last_generated_at"]
-        if now - last_time < timedelta(days=7):
-            if usage.get("count", 0) >= 1:
-                unlock_date = last_time + timedelta(days=7)
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Default API key limit reached (1 free dataset created). Next dataset generation available in 1 week on {unlock_date.strftime('%b %d, %Y %H:%M UTC')}. Add your custom API key in Settings to unlock immediate generation with no 1-week reset!"
-                )
-        else:
-            # 7 days passed -> reset default usage counter
-            _default_usage_db[user_id] = {"count": 0, "last_generated_at": None}
+    if not is_custom_api_key:
+        eligibility = get_generation_eligibility(user_id)
+        if not eligibility["allowed"]:
+            raise HTTPException(
+                status_code=403,
+                detail=eligibility["message"]
+            )
 
 def record_default_api_dataset_creation(user_id: str, is_custom_api_key: bool = False):
-    if is_custom_api_key:
-        # Do NOT touch or reset default API counter when custom key is used
-        return
     now = datetime.now(timezone.utc)
-    curr = _default_usage_db.get(user_id, {"count": 0, "last_generated_at": None})
-    _default_usage_db[user_id] = {
-        "count": curr.get("count", 0) + 1,
-        "last_generated_at": now
-    }
+    if user_id not in _user_generations_db:
+        _user_generations_db[user_id] = []
+    _user_generations_db[user_id].append(now)
+
 
 def create_checkout_order(req: CreateOrderRequest) -> CreateOrderResponse:
     if req.plan_id == PlanType.normal:

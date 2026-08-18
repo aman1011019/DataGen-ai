@@ -162,3 +162,44 @@ class ChangePlanRequest(BaseModel):
 class CancelSubscriptionRequest(BaseModel):
     user_id: str
     reason: Optional[str] = None
+
+# Server-Side AI Request / Response DTOs
+class AISchemaRequest(BaseModel):
+    category: str = "Healthcare"
+    prompt: Optional[str] = ""
+
+class FieldConstraint(BaseModel):
+    min: Optional[float] = None
+    max: Optional[float] = None
+    options: Optional[List[str]] = None
+    pattern: Optional[str] = None
+
+class FieldDefinitionDTO(BaseModel):
+    id: Optional[str] = None
+    name: str
+    type: str
+    description: Optional[str] = ""
+    required: Optional[bool] = True
+    nullable: Optional[bool] = False
+    syntheticStrategy: Optional[str] = "realistic_distribution"
+    constraints: Optional[Dict[str, Any]] = {}
+
+class AISchemaResponse(BaseModel):
+    status: str = "success"
+    category: str
+    fields: List[FieldDefinitionDTO]
+
+class AISuggestFieldsRequest(BaseModel):
+    category: str = "Healthcare"
+    existing_fields: List[FieldDefinitionDTO] = []
+
+class AISuggestFieldsResponse(BaseModel):
+    status: str = "success"
+    suggestions: List[FieldDefinitionDTO]
+
+class UsageEligibilityResponse(BaseModel):
+    allowed: bool
+    remainingDatasets: int
+    windowEnd: Optional[str] = None
+    reason: Optional[str] = None
+    message: Optional[str] = None

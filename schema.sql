@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS "users" (
     "photoUrl" TEXT,
     "organization" VARCHAR(255),
     "role" VARCHAR(100),
-    "plan" VARCHAR(50) DEFAULT 'Normal',
     "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -104,3 +103,52 @@ CREATE INDEX IF NOT EXISTS "idx_usagewindow_user" ON "UsageWindow"("userProfileI
 CREATE INDEX IF NOT EXISTS "idx_generationjob_user" ON "GenerationJob"("userProfileId");
 CREATE INDEX IF NOT EXISTS "idx_user_datasets_owner" ON "user_datasets"("owner_user_id");
 CREATE INDEX IF NOT EXISTS "idx_user_notifications_user" ON "user_notifications"("user_id");
+
+-- ==================== ROW LEVEL SECURITY (RLS) POLICIES ====================
+ALTER TABLE "UserProfile" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Dataset" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "DatasetField" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "user_datasets" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "user_notifications" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "UsageWindow" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "GenerationJob" ENABLE ROW LEVEL SECURITY;
+
+-- UserProfile Policies
+CREATE POLICY "Users can manage own UserProfile" ON "UserProfile"
+    FOR ALL USING (auth.uid()::text = "id" OR auth.uid()::text = "supabaseUid");
+
+-- users Policies
+CREATE POLICY "Users can manage own user record" ON "users"
+    FOR ALL USING (auth.uid()::text = "id");
+
+-- Dataset Policies
+CREATE POLICY "Users can manage own Datasets" ON "Dataset"
+    FOR ALL USING (auth.uid()::text = "userProfileId");
+
+-- DatasetField Policies
+CREATE POLICY "Users can manage fields of own Datasets" ON "DatasetField"
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM "Dataset"
+            WHERE "Dataset"."id" = "DatasetField"."datasetId"
+            AND "Dataset"."userProfileId" = auth.uid()::text
+        )
+    );
+
+-- user_datasets Policies
+CREATE POLICY "Users can manage own user_datasets" ON "user_datasets"
+    FOR ALL USING (auth.uid()::text = "owner_user_id");
+
+-- user_notifications Policies
+CREATE POLICY "Users can manage own notifications" ON "user_notifications"
+    FOR ALL USING (auth.uid()::text = "user_id");
+
+-- UsageWindow Policies
+CREATE POLICY "Users can view own UsageWindow" ON "UsageWindow"
+    FOR ALL USING (auth.uid()::text = "userProfileId");
+
+-- GenerationJob Policies
+CREATE POLICY "Users can view own GenerationJob" ON "GenerationJob"
+    FOR ALL USING (auth.uid()::text = "userProfileId");
+
