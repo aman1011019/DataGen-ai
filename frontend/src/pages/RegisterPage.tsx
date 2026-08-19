@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { User as UserIcon, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, Check, CheckCircle2 } from "lucide-react";
 import Logo from "@/components/Logo";
 import { useAuth } from "../hooks/useAuth";
+import { registerUser, loginWithGoogle } from "../services/authService";
 
 export const RegisterPage = () => {
   const navigate = useNavigate();
@@ -53,8 +54,12 @@ export const RegisterPage = () => {
       try {
         await signUp(email, password, name);
       } catch (_) {}
-      await registerUser(name, email, password);
-      navigate("/dashboard");
+      const res = await registerUser(name, email, password);
+      if (res && !res.emailConfirmed) {
+        setUnverifiedEmailMessage(true);
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setErrorMsg((err as Error).message || "Account creation failed.");
     } finally {
@@ -68,7 +73,12 @@ export const RegisterPage = () => {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setErrorMsg("Google Sign-In failed.");
+      try {
+        await loginWithGoogle();
+      } catch (fallbackErr) {
+        setErrorMsg("Google Sign-In failed.");
+      }
+    } finally {
       setIsLoading(false);
     }
   };

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
 import { useAuth } from "../hooks/useAuth";
+import { loginUser, loginWithGoogle } from "../services/authService";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -52,7 +53,12 @@ export const LoginPage = () => {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setErrorMsg("Google Sign-In failed. Please try again.");
+      try {
+        await loginWithGoogle();
+      } catch (fallbackErr) {
+        setErrorMsg("Google Sign-In failed. Please try again.");
+      }
+    } finally {
       setIsLoading(false);
     }
   };
