@@ -43,8 +43,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def fix_vercel_path_routing(request: Request, call_next):
+    path = request.url.path
+    if "/index.py" in path:
+        path = path.split("/index.py")[-1]
+    if not path or path == "":
+        path = "/"
+    request.scope["path"] = path
+    return await call_next(request)
+
+
 @app.get("/")
 @app.get("/api")
+@app.get("/health")
 @app.get("/api/health")
 def root():
     return {
@@ -65,6 +77,7 @@ def get_schema_prompt(format: Optional[str] = "postgresql"):
 
 # ==================== SERVER-SIDE AI & USAGE ENDPOINTS ====================
 @app.post("/api/ai/schema", response_model=AISchemaResponse)
+@app.post("/ai/schema", response_model=AISchemaResponse)
 async def api_generate_schema(req: AISchemaRequest):
     fields = await generate_schema_ai(req.category, req.prompt or "")
     return AISchemaResponse(
@@ -74,6 +87,7 @@ async def api_generate_schema(req: AISchemaRequest):
     )
 
 @app.post("/api/ai/suggest-fields", response_model=AISuggestFieldsResponse)
+@app.post("/ai/suggest-fields", response_model=AISuggestFieldsResponse)
 async def api_suggest_fields(req: AISuggestFieldsRequest):
     existing_dicts = [f.model_dump() if hasattr(f, "model_dump") else dict(f) for f in req.existing_fields]
     suggestions = await suggest_fields_ai(req.category, existing_dicts)
@@ -83,6 +97,7 @@ async def api_suggest_fields(req: AISuggestFieldsRequest):
     )
 
 @app.get("/api/usage/eligibility", response_model=UsageEligibilityResponse)
+@app.get("/usage/eligibility", response_model=UsageEligibilityResponse)
 def api_usage_eligibility(user_email: Optional[str] = None):
     user_id = user_email.replace("@", "_").replace(".", "_").lower() if user_email else "anonymous"
     res = get_generation_eligibility(user_id)

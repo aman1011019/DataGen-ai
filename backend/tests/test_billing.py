@@ -13,12 +13,12 @@ from fastapi.testclient import TestClient
 try:
     from backend.main import app
     from backend.billing import (
-        _subscriptions_db, _usage_db, _default_usage_db, PlanType, SubscriptionStatus, Subscription, Usage
+        _subscriptions_db, _usage_db, _user_generations_db, PlanType, SubscriptionStatus, Subscription, Usage
     )
 except ImportError:
     from main import app
     from billing import (
-        _subscriptions_db, _usage_db, _default_usage_db, PlanType, SubscriptionStatus, Subscription, Usage
+        _subscriptions_db, _usage_db, _user_generations_db, PlanType, SubscriptionStatus, Subscription, Usage
     )
 
 client = TestClient(app)
@@ -26,7 +26,7 @@ client = TestClient(app)
 def setup_function():
     _subscriptions_db.clear()
     _usage_db.clear()
-    _default_usage_db.clear()
+    _user_generations_db.clear()
 
 def test_normal_plan_5000_rows_allow():
     user_email = "student_test_5000@datagen.ai"
@@ -60,26 +60,28 @@ def test_default_api_5001_rows_reject():
     )
     assert response.status_code == 400
     err = response.json()["detail"]
-    assert "5,000 records" in err
+    err_msg = err if isinstance(err, str) else err.get("message", "")
+    assert "5,000" in err_msg
 
-def test_default_api_second_dataset_cooldown_reject():
+def test_default_api_cooldown_reject_after_limit():
     user_email = "student_test_dataset2@datagen.ai"
 
-    # First dataset generation -> ALLOW
-    res1 = client.post(
-        "/generate",
-        json={
-            "task_type": "classification",
-            "domain": "finance",
-            "num_samples": 50,
-            "user_email": user_email,
-            "is_custom_api_key": False
-        }
-    )
-    assert res1.status_code == 200
+    # 3 dataset generations -> ALLOW
+    for _ in range(3):
+        res = client.post(
+            "/generate",
+            json={
+                "task_type": "classification",
+                "domain": "finance",
+                "num_samples": 50,
+                "user_email": user_email,
+                "is_custom_api_key": False
+            }
+        )
+        assert res.status_code == 200
 
-    # Second dataset generation within 1 week -> REJECT (403 Cooldown)
-    res2 = client.post(
+    # 4th dataset generation within 1 week -> REJECT (403 Cooldown)
+    res_exceeded = client.post(
         "/generate",
         json={
             "task_type": "classification",
@@ -89,9 +91,9 @@ def test_default_api_second_dataset_cooldown_reject():
             "is_custom_api_key": False
         }
     )
-    assert res2.status_code == 403
-    err = res2.json()["detail"]
-    assert "1 week" in err
+    assert res_exceeded.status_code == 403
+    err = res_exceeded.json()["detail"]
+    assert "Weekly limit reached" in err or "3 datasets" in err
 
 def test_custom_api_key_bypasses_cooldown():
     user_email = "custom_key_user@datagen.ai"

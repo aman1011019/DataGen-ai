@@ -14,4 +14,5 @@ if backend_dir not in sys.path:
 from backend.main import app
 
 # Export FastAPI app for Vercel Serverless Function deployment
+app = app
 __all__ = ["app"]
